@@ -3,6 +3,8 @@ import sklearn.cluster
 import numpy as np
 import multiprocessing as mp
 import os
+from delf import feature_io
+from delf import extractor
 '''
 Image representation class, which provide functions to represent the image 
 @Parameter:
@@ -11,6 +13,7 @@ Image representation class, which provide functions to represent the image
     k: number of words to construct the codeword, only applicable if saved_model == None
 @Atrribute:
     name: name of the object
+    extractor: type of the local features
     codebook: Sklearn Kmean object, use as the main codebook
 @Methods:
     CreateCodeBookFromFeatures
@@ -51,14 +54,34 @@ class ImageRepresentation:
         return image_name_list, features_list
 
 
-    def CreateCodeBookFromFeatures(self, features_dir=None, chunk_size = None, training_epocs=None, save_dir=None):
+    def __ReadDelfFeatures(self, dir):
+        '''
+        Read the delf features to the memory
+        @InPut: dir - Directory that contains the features in numpy format
+        @Output: Numpy array of the features,
+                 Array of images name
+        '''
+        features_file_list = [f for f in os.listdir(dir)]
+        features_list = []
+        image_name_list = []
+        for f in features_file_list:
+            _, _, features, _, _ = feature_io.ReadFromFile(os.path.join(dir, f))
+            features_list.append(features)
+            image_name_list.append(f.split('.')[0])
+        print("Load %d features" %len(features_list))
+        return image_name_list, features_list
+
+    def CreateCodeBookFromFeatures(self, features_dir=None, feature_type=None, chunk_size = None, training_epocs=None, save_dir=None):
         '''
         Create the visual words by running Kmean on the features
         @Input: The features bag
         @Output: The codebook
         '''
         # Load all features in the directory to the list of features
-        _, features_list = self.__ReadRootSiftFeatures(features_dir)
+        if feature_type == 'sift':
+            _, features_list = self.__ReadRootSiftFeatures(features_dir)
+        elif feature_type == 'delf':
+            _, features_list = self.__ReadDelfFeatures(features_dir)
         buffer = []
         index = 0
         for epoc in range(training_epocs):
@@ -95,14 +118,17 @@ class ImageRepresentation:
         return bow_vector
 
             
-    def BuildBoWDatabase(self, features_dir, database_dir):
+    def BuildBoWDatabase(self, features_dir=None, feature_type=None, database_dir=None):
         '''
         Create a database with BoW 
         @Input: a folder of image descriptor
         '''
         print("Creating BoW dataset at %s with feature directory %s" %(database_dir, features_dir))
         # Load all features in the directory to the list of features
-        image_list, features_list = self.__ReadRootSiftFeatures(features_dir)
+        if feature_type == "sift":
+            image_list, features_list = self.__ReadRootSiftFeatures(features_dir)
+        elif feature_type == 'delf':
+            image_list, features_list = self.__ReadDelfFeatures(features_dir)
         # Create the thread pool for encoding in parallel
         N = mp.cpu_count()
         p = mp.Pool(processes=N)
@@ -135,14 +161,17 @@ class ImageRepresentation:
 
         return vlad_vector
     
-    def BuildVLADDatabase(self, features_dir, database_dir):
+    def BuildVLADDatabase(self, features_dir=None, feature_type=None, database_dir=None):
         '''
-        Create a database with BoW 
+        Create a database with VLAD
         @Input: a folder of image descriptor
         '''
         print("Creating VLAD dataset at %s with feature directory %s" %(database_dir, features_dir))
         # Load all features in the directory to the list of features
-        image_list, features_list = self.__ReadRootSiftFeatures(features_dir)
+        if feature_type == "sift":
+            image_list, features_list = self.__ReadRootSiftFeatures(features_dir)
+        elif feature_type == 'delf':
+            image_list, features_list = self.__ReadDelfFeatures(features_dir)
         # Create the thread pool for encoding in parallel
         N = mp.cpu_count()
         p = mp.Pool(processes=N)
