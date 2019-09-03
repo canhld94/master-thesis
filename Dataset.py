@@ -101,7 +101,7 @@ class QueryToolkit:
         self.name = name
         pass
     
-    def _get_exif_data(image):
+    def _get_exif_data(self,image):
         """
         Returns a dictionary from the exif data of an PIL Image item. 
         Also converts the GPS Tags
@@ -122,13 +122,13 @@ class QueryToolkit:
                     exif_data[decoded] = value
         return exif_data
 
-    def _get_if_exist(data, key):
+    def _get_if_exist(self, data, key):
         if key in data:
             return data[key]
             
         return None
         
-    def _convert_to_degress(value):
+    def _convert_to_degress(self, value):
         """Helper function to convert the GPS coordinates stored in the EXIF to degress in float format"""
         d0 = value[0][0]
         d1 = value[0][1]
@@ -144,7 +144,7 @@ class QueryToolkit:
 
         return d + (m / 60.0) + (s / 3600.0)
 
-    def _get_lat_lon(exif_data):
+    def _get_lat_lon(self, exif_data):
         """
         Returns the latitude and longitude, if available, from the provided exif_data 
         (obtained through get_exif_data above)
@@ -155,28 +155,31 @@ class QueryToolkit:
         if "GPSInfo" in exif_data:		
             gps_info = exif_data["GPSInfo"]
 
-            gps_latitude = _get_if_exist(gps_info, "GPSLatitude")
-            gps_latitude_ref = _get_if_exist(gps_info, 'GPSLatitudeRef')
-            gps_longitude = _get_if_exist(gps_info, 'GPSLongitude')
-            gps_longitude_ref = _get_if_exist(gps_info, 'GPSLongitudeRef')
+            gps_latitude = self._get_if_exist(gps_info, "GPSLatitude")
+            gps_latitude_ref = self._get_if_exist(gps_info, 'GPSLatitudeRef')
+            gps_longitude = self._get_if_exist(gps_info, 'GPSLongitude')
+            gps_longitude_ref = self._get_if_exist(gps_info, 'GPSLongitudeRef')
 
             if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
-                lat = _convert_to_degress(gps_latitude)
+                lat = self._convert_to_degress(gps_latitude)
                 if gps_latitude_ref != "N":                     
                     lat = 0 - lat
 
-                lon = _convert_to_degress(gps_longitude)
+                lon = self._convert_to_degress(gps_longitude)
                 if gps_longitude_ref != "E":
                     lon = 0 - lon
+        return lat, lon
 
     def AnnotatesQueries(self, query_dir = None, database_indexes = None, query_indexes = None, bound = None):
         '''
         '''
         # Get all GPS location of the query
+        queries = []
         for f in os.listdir(query_dir):
             im = Image.open(os.path.join(query_dir,f))
-            exif = _get_exif_data(im)
-            gps = _get_lat_lon(exif)
+            exif = self._get_exif_data(im)
+            gps = self._get_lat_lon(exif)
+            print(gps)
             queries.append((f[:-4], gps[0], gps[1]))
         # Get all GPS location of the database using the database index file
         with open(database_indexes, 'r') as fi:
@@ -185,17 +188,19 @@ class QueryToolkit:
         database = []
         for line in lines:
             tup = line.split('\t')
-            database.append((tup[0], float(tuo[1]), float(tuo[2])))
+            database.append((tup[0], float(tup[1]), float(tup[2])))
         # Assign database images to each query with the distance threshold smaller than bound
-        distance_threshold = bound/10.0 *const_10m
-        for query in queries:
-            rank_list = []
-            for entry in database:
-                lat_diff = query[1] - entry[1]
-                lng_diff = query[2] - entry[2]
-                distance = math.sqrt(lat_diff*lat_diff + lng_diff*lng_diff)
-                if(distance < distance_threshold):
-                    rank_list.append(entry[0])
-        # Save to the query index files:
-        
+        distance_threshold = bound/10.0 * self.const_10m
+        with open(query_indexes,'w') as fo:
+            for query in queries:
+                fo.write(str(query[0]) + ',')
+                for entry in database:
+                    lat_diff = query[1] - entry[1]
+                    lng_diff = query[2] - entry[2]
+                    distance = math.sqrt(lat_diff*lat_diff + lng_diff*lng_diff)
+                    if(distance < distance_threshold):
+                        fo.write(entry[0] + ',')
+                fo.seek(fo.tell() - 1)
+                fo.write('\n')
+
 
