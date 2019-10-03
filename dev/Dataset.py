@@ -12,26 +12,14 @@ from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
 
 '''
-This is the toolkit for creating the city-scale database with google streetview.
-The toolkit includes two class:
-Class: DatabaseToolkit
-    @Parameters:
-
-    @Atributes:
-
-    @Methods:
-        CrawlImages: Crawl the images from desired images
-        PostProcessing: Post-process the database
-Class: QueryToolKit
-    @Parameters:
-
-    @Attributes:
-
-    @Methods:
-        AnnotatesQueries:
+General basic toolkits for building the dataset for CBIR system from Google Street View
+    DatabaseToolkit: building the database from google streetview image 
+    QueryToolKit: buiding the queries based on the database
+    FeaturesToolkit: extracting the features
+    FeaturesIOToolkit: Read/Write the features 
 '''
 
-class DatabaseToolkit:
+class Database:
     const_1m = 0.000008985 # 1 metter different in lat
     const_half_pi = 0.0174533 # pi/180
 
@@ -50,14 +38,14 @@ class DatabaseToolkit:
         if(self.key == None):
             print("ERROR: GoogleMap API requrire a biiling account and a key")
             sys.exit(-1)
-        distance = density * const_1m
+        distance = density * self.const_1m
         lat = start_lat
         index_lat = 0
-        index_lng = 0
         indexes = []
         print("Start Crawling The Streetview Images")
         while lat <= end_lat:
             lng = start_lng
+            index_lng = 0
             while lng <= end_lng:
                 location = str(lat) + ',' + str(lng)
                 # define the params for the streetview API
@@ -68,12 +56,13 @@ class DatabaseToolkit:
                         'pitch': '15',
                         'key': self.key,
                         'location': location,
-                        'heading': str(heading)
+                        'heading': str(heading),
+                        'radius': 20
                     }
                     params.append(req)
                 save_dir = os.path.join(download_dir,str(index_lat) + '_' + str(index_lng))
                 # Create the result object
-                results = google_streetview.api.results(params)
+                result = google_streetview.api.results(params)
                 # Download images to the ditectory downloads:
                 result.download_links(save_dir)
                 # Remove the directory with no images and index the downloaded location
@@ -83,17 +72,20 @@ class DatabaseToolkit:
                     # Load the metadata from dowloaded images to index the location
                     json_file = open(os.path.join(save_dir, 'metadata.json'))
                     json_data = json.load(json_file)
-                    panoid = json_data[0]['panoid']
+                    panoid = json_data[0]['pano_id']
                     gps = json_data[0]['location']
                     indexes.append((panoid, str(index_lat) + '_' + str(index_lng), lat, lng, gps['lat'], gps['lng'] ))
-                lng += distance/math.cos(lat*const_half_pi)
+                lng += distance/math.cos(lat*self.const_half_pi)
                 index_lng += 1
             print("Crawling done with lat = %f" %lat)
             lat += distance
             index_lat += 1
+        with open(os.path.join(download_dir, 'index.csv'), 'w') as f:
+            for index in indexes:
+                f.write(str(index))
+                f.write('\n')
 
-
-class QueryToolkit:
+class Query:
 
     const_10m = 0.000109144766254594
 
@@ -202,5 +194,3 @@ class QueryToolkit:
                         fo.write(entry[0] + ',')
                 fo.seek(fo.tell() - 1)
                 fo.write('\n')
-
-
